@@ -24,22 +24,18 @@ public class Assets implements Disposable {
 
     public Assets() {
         for (String name : NAMES) {
-            if (Gdx.files.internal(name + ".png").exists()) {
-                manager.load(name + ".png", Texture.class);
+            String path = name + ".png";
+            if (!Gdx.files.internal(path).exists()) {
+                throw new IllegalStateException("Missing required texture: " + path);
             }
+            manager.load(path, Texture.class);
         }
         manager.finishLoading();
 
         for (String name : NAMES) {
-            if (manager.isLoaded(name + ".png", Texture.class)) {
-                Texture texture = manager.get(name + ".png", Texture.class);
-                texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-                regions.put(name, new TextureRegion(texture));
-            }
-        }
-
-        if (!regions.containsKey("dirt")) {
-            throw new IllegalStateException("Missing required texture: dirt.png");
+            Texture texture = manager.get(name + ".png", Texture.class);
+            texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+            regions.put(name, new TextureRegion(texture));
         }
 
         for (int i = 0; i < Tiles.COUNT; i++) {

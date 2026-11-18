@@ -92,7 +92,8 @@ public class Hud implements Disposable {
             batch.setColor(1f, 1f, 1f, 1f);
             int id = inv.ids[i];
             if (id != 0) {
-                TextureRegion icon = Inventory.isTool(id) ? assets.get("particle") : assets.tile(id);
+                String toolTexture = Inventory.toolTexture(id);
+                TextureRegion icon = toolTexture != null ? assets.get(toolTexture) : assets.tile(id);
                 if (icon != null) batch.draw(icon, sx + slot * 0.15f, sy + slot * 0.15f, slot * 0.7f, slot * 0.7f);
                 if (inv.counts[i] > 1) font.draw(batch, String.valueOf(inv.counts[i]), sx + 3, sy + 13 * uiScale);
             }

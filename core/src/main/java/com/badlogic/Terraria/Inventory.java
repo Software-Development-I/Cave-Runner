@@ -26,6 +26,21 @@ public class Inventory {
         return id >= 100;
     }
 
+    public static String toolTexture(int id) {
+        switch (id) {
+            case ITEM_WOOD_PICK:
+            case ITEM_STONE_PICK:
+            case ITEM_IRON_PICK:
+                return "pickaxe";
+            case ITEM_WOOD_SWORD:
+            case ITEM_STONE_SWORD:
+            case ITEM_IRON_SWORD:
+                return "sword";
+            default:
+                return null;
+        }
+    }
+
     public static String name(int id) {
         switch (id) {
             case ITEM_WOOD_PICK: return "Wood Pickaxe";
