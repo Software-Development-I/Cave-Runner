@@ -23,8 +23,18 @@ public final class Config {
     public static final float GRAVITY = -600f;
     public static final float MAX_FALL = -400f;
 
+    // ---- Wall interaction ----
+    public static final float WALL_SLIDE_MAX = -60f;
+    public static final float WALL_JUMP_X = 160f;
+    public static final float WALL_JUMP_Y = 220f;
+
     public static final int MAX_HEALTH = 100;
     public static final int START_LIVES = 3;
+
+    // ---- Camera ----
+    public static final int VIEW_W_TILES = 32;
+    public static final int VIEW_H_TILES = 18;
+    public static final float CAMERA_SMOOTH = 0.15f;
 
     // ---- Time ----
     public static final float DAY_LENGTH = 120f;

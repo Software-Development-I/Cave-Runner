@@ -9,45 +9,52 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
 
-/** {@link com.badlogic.gdx.ApplicationListener} implementation shared by all platforms. */
+/** Module 4: a real, physics-driven Player replaces the camera-target dot. */
 public class Main extends ApplicationAdapter {
-    private static final int VIEW_W_TILES = 32;
-    private static final int VIEW_H_TILES = 18;
-    private static final float MIN_ZOOM = 0.5f;
-    private static final float MAX_ZOOM = 2.0f;
-    private static final float FOCUS_SPEED = 220f;
-
     private SpriteBatch batch;
     private OrthographicCamera camera;
     private Assets assets;
     private World world;
-    private float zoom = 1f;
-    private float focusX;
-    private float focusY;
+    private Player player;
+    private final Player.Controls controls = new Player.Controls();
     private final float[] skyTmp = new float[3];
 
     @Override
     public void create() {
         batch = new SpriteBatch();
-        assets = new Assets();
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, VIEW_W_TILES * World.TILE_SIZE,
-            VIEW_H_TILES * World.TILE_SIZE);
-        applyZoom();
+        applyViewport();
+
+        assets = new Assets();
         world = new World(12345L, 1);
-        focusX = world.spawnX * World.TILE_SIZE;
-        focusY = world.spawnY * World.TILE_SIZE;
+
+        float spawnPx = world.spawnX * World.TILE_SIZE;
+        float spawnPy = world.spawnY * World.TILE_SIZE;
+        player = new Player(spawnPx, spawnPy, assets.get("player"));
+        player.setSpawn(spawnPx, spawnPy);
+
+        camera.position.set(player.centerX(), player.centerY(), 0);
+        camera.update();
     }
 
     @Override
     public void resize(int width, int height) {
-        applyZoom();
+        applyViewport();
+    }
+
+    private void applyViewport() {
+        float aspect = Gdx.graphics.getWidth()
+            / (float) Math.max(1, Gdx.graphics.getHeight());
+        camera.viewportHeight = Config.VIEW_H_TILES * World.TILE_SIZE;
+        camera.viewportWidth = camera.viewportHeight * aspect;
+        camera.update();
     }
 
     @Override
     public void render() {
         float delta = Gdx.graphics.getDeltaTime();
-        handleInput(delta);
+        buildControls();
+        player.update(delta, world, controls);
         updateCamera();
         draw();
     }
@@ -58,52 +65,28 @@ public class Main extends ApplicationAdapter {
         assets.dispose();
     }
 
-    private void handleInput(float delta) {
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT) || Gdx.input.isKeyPressed(Input.Keys.A)) {
-            focusX -= FOCUS_SPEED * delta;
+    private void buildControls() {
+        controls.reset();
+        if (Gdx.input.isKeyPressed(Input.Keys.A)
+            || Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+            controls.moveX -= 1;
         }
-        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT) || Gdx.input.isKeyPressed(Input.Keys.D)) {
-            focusX += FOCUS_SPEED * delta;
+        if (Gdx.input.isKeyPressed(Input.Keys.D)
+            || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+            controls.moveX += 1;
         }
-        if (Gdx.input.isKeyPressed(Input.Keys.UP) || Gdx.input.isKeyPressed(Input.Keys.W)) {
-            focusY += FOCUS_SPEED * delta;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN) || Gdx.input.isKeyPressed(Input.Keys.S)) {
-            focusY -= FOCUS_SPEED * delta;
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.EQUALS)
-            || Gdx.input.isKeyJustPressed(Input.Keys.PLUS)) {
-            zoomBy(-0.1f);
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.MINUS)) {
-            zoomBy(0.1f);
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_0)) {
-            zoom = 1f;
-            applyZoom();
-        }
+        controls.jumpPressed = Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
+            || Gdx.input.isKeyJustPressed(Input.Keys.W)
+            || Gdx.input.isKeyJustPressed(Input.Keys.UP);
     }
 
-    private void zoomBy(float delta) {
-        zoom = MathUtils.clamp(zoom + delta, MIN_ZOOM, MAX_ZOOM);
-        applyZoom();
-    }
-
-    /** Recompute viewport size from zoom and the window aspect ratio. */
-    private void applyZoom() {
-        float aspect = Gdx.graphics.getWidth()
-            / (float) Math.max(1, Gdx.graphics.getHeight());
-        camera.viewportHeight = VIEW_H_TILES * World.TILE_SIZE * zoom;
-        camera.viewportWidth = camera.viewportHeight * aspect;
-        camera.update();
-    }
-
-    /** Smooth the camera toward the focus point, then keep it inside the world. */
     private void updateCamera() {
         float halfW = camera.viewportWidth / 2f;
         float halfH = camera.viewportHeight / 2f;
-        camera.position.x += (focusX - camera.position.x) * 0.15f;
-        camera.position.y += (focusY - camera.position.y) * 0.15f;
+        float tx = player.centerX();
+        float ty = player.centerY() + 10f;
+        camera.position.x += (tx - camera.position.x) * Config.CAMERA_SMOOTH;
+        camera.position.y += (ty - camera.position.y) * Config.CAMERA_SMOOTH;
         camera.position.x = MathUtils.clamp(camera.position.x, halfW,
             World.WIDTH * World.TILE_SIZE - halfW);
         camera.position.y = MathUtils.clamp(camera.position.y, halfH,
@@ -118,6 +101,7 @@ public class Main extends ApplicationAdapter {
         Gdx.gl.glClearColor(sky[0], sky[1], sky[2], 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         drawWorld();
+        drawPlayer();
     }
 
     /** Draw only the tile range visible to the camera. */
@@ -174,6 +158,13 @@ public class Main extends ApplicationAdapter {
                 }
             }
         }
+        batch.end();
+    }
+
+    private void drawPlayer() {
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        player.render(batch);
         batch.end();
     }
 }
