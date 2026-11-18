@@ -13,6 +13,7 @@ public class GameWorld {
     public final List<ItemDrop> drops = new ArrayList<>();
     public final List<Enemy> enemies = new ArrayList<>();
     public final List<Projectile> projectiles = new ArrayList<>();
+    public final Tutorial tutorial = new Tutorial();
 
     public boolean evMine, evPlace, evCraft, evHurt, evDeath, evAttack, evKill, evCoin;
     public float shake = 0f;
@@ -73,16 +74,18 @@ public class GameWorld {
         }
 
         player.update(dt, world, controls);
+        if (controls.jumpPressed) tutorial.jumpCount++;
         if (player.tookDamageThisFrame) { evHurt = true; shake = 6f; }
 
         Rectangle hit = player.tryAttack(controls);
-        if (hit != null) { evAttack = true; doMelee(hit); }
+        if (hit != null) { evAttack = true; tutorial.attackCount++; doMelee(hit); }
 
         updateTraps(dt);
         updateEnemies(dt);
         updateProjectiles(dt);
         updateDrops(dt);
         updateSpawning(dt);
+        tutorial.update(dt, player, controls);
     }
 
     public void mineTile(int tx, int ty, float dt) {
@@ -121,6 +124,7 @@ public class GameWorld {
         int tile = world.get(tx, ty);
         world.remove(tx, ty);
         evMine = true;
+        tutorial.minedCount++;
 
         float cx = (tx + 0.5f) * World.TILE_SIZE;
         float cy = (ty + 0.5f) * World.TILE_SIZE;
@@ -180,6 +184,7 @@ public class GameWorld {
         world.set(tx, ty, id);
         player.inventory.useSelected();
         evPlace = true;
+        tutorial.placedCount++;
         return true;
     }
 
