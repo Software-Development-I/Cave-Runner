@@ -73,6 +73,10 @@ public class Player {
         spawnPoint.set(x, y);
     }
 
+    public Vector2 getSpawn() {
+        return spawnPoint;
+    }
+
     public void respawnAtSpawn() {
         position.set(spawnPoint);
         velocity.setZero();

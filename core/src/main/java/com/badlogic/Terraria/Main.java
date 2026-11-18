@@ -23,6 +23,7 @@ public class Main extends ApplicationAdapter {
     private final Vector3 mouse = new Vector3();
     private Hud hud;
     private TouchHUD touch;
+    private Sfx sfx;
     private BitmapFont font;
     private final float[] skyTmp = new float[3];
     private final int[] mineTargetTmp = new int[2];
@@ -39,13 +40,17 @@ public class Main extends ApplicationAdapter {
 
         assets = new Assets();
         hud = new Hud(assets);
-        World world = new World(12345L, 1);
-        float spawnPx = world.spawnX * World.TILE_SIZE;
-        float spawnPy = world.spawnY * World.TILE_SIZE;
-        Player player = new Player(spawnPx, spawnPy, assets.get("player"));
-        player.setSpawn(spawnPx, spawnPy);
-        game = new GameWorld(world, player);
-        player.inventory.add(Tiles.WOOD, 4);
+        sfx = new Sfx();
+        game = SaveData.load(assets.get("player"));
+        if (game == null) {
+            World world = new World(System.nanoTime(), 1);
+            float spawnPx = world.spawnX * World.TILE_SIZE;
+            float spawnPy = world.spawnY * World.TILE_SIZE;
+            Player player = new Player(spawnPx, spawnPy, assets.get("player"));
+            player.setSpawn(spawnPx, spawnPy);
+            game = new GameWorld(world, player);
+            player.inventory.add(Tiles.WOOD, 4);
+        }
 
         touch = new TouchHUD();
         touch.enabled = true;
@@ -60,12 +65,13 @@ public class Main extends ApplicationAdapter {
                     touch.setVisible(touch.enabled);
                     hud.touchMode = touch.enabled;
                 }
+                if (k == Input.Keys.M) sfx.setMusic(!sfx.musicOn);
                 return false;
             }
         });
         Gdx.input.setInputProcessor(mux);
 
-        camera.position.set(player.centerX(), player.centerY(), 0);
+        camera.position.set(game.player.centerX(), game.player.centerY(), 0);
         camera.update();
         hud.resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
@@ -101,19 +107,43 @@ public class Main extends ApplicationAdapter {
         }
 
         if (game.gameOver) {
-            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) create();
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                SaveData.submitScore(game.player.score);
+                SaveData.delete();
+                create();
+            }
         } else if (hud.inventoryOpen) {
             handleCraftMenuInput();
         } else {
             buildControls();
             game.update(dt, controls);
+            playEventSounds();
             handleWorldPointer(dt);
             handleHotbarInput();
+            if (game.shouldAutosave()) SaveData.save(game);
         }
         updateCamera();
         draw();
         touch.consumeFlags();
         game.clearEvents();
+    }
+
+    private void playEventSounds() {
+        if (game.evMine) sfx.mine();
+        if (game.evPlace) sfx.place();
+        if (game.evCraft) sfx.craft();
+        if (game.evHurt) sfx.hurt();
+        if (game.evDeath) sfx.death();
+        if (game.evAttack) sfx.attack();
+        if (game.evKill) sfx.kill();
+        if (game.evCoin) sfx.coin();
+        if (game.evLevelUp) sfx.levelUp();
+        if (controls.jumpPressed && !game.player.grounded) sfx.jump();
+    }
+
+    @Override
+    public void pause() {
+        SaveData.save(game);
     }
 
     private void buildControls() {
@@ -331,7 +361,12 @@ public class Main extends ApplicationAdapter {
         batch.begin();
         for (Enemy enemy : game.enemies) {
             TextureRegion region = assets.get(enemy.textureName());
-            if (enemy.hurtTimer > 0) batch.setColor(1f, 0.5f, 0.5f, 1f);
+            if (enemy.type == Enemy.BOSS && enemy.windupFraction() > 0f
+                && ((int) (enemy.windupFraction() * 20f)) % 2 == 0) {
+                batch.setColor(1f, 0.6f, 0.6f, 1f);
+            } else if (enemy.hurtTimer > 0) {
+                batch.setColor(1f, 0.5f, 0.5f, 1f);
+            }
             if (enemy.facingRight) batch.draw(region, enemy.x, enemy.y, enemy.w, enemy.h);
             else batch.draw(region, enemy.x + enemy.w, enemy.y, -enemy.w, enemy.h);
             batch.setColor(1f, 1f, 1f, 1f);
@@ -391,17 +426,19 @@ public class Main extends ApplicationAdapter {
     private void handleCraftMenuInput() {
         for (int i = 0; i < Recipe.ALL.size() && i < 9; i++) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1 + i)) {
-                game.craft(Recipe.ALL.get(i));
+                if (game.craft(Recipe.ALL.get(i))) sfx.craft();
             }
         }
     }
 
     @Override
     public void dispose() {
+        SaveData.save(game);
         batch.dispose();
         assets.dispose();
         font.dispose();
         hud.dispose();
         touch.dispose();
+        sfx.dispose();
     }
 }

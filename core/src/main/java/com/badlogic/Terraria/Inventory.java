@@ -11,6 +11,13 @@ public class Inventory {
     public final int[] counts = new int[SIZE];
     public int selected = 0;
 
+    public void clear() {
+        for (int i = 0; i < SIZE; i++) {
+            ids[i] = 0;
+            counts[i] = 0;
+        }
+    }
+
     public static boolean isPlaceable(int id) {
         return id > 0 && id < Tiles.COUNT && Tiles.isBreakable(id) && id != Tiles.SPIKES;
     }

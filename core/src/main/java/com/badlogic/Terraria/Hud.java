@@ -60,7 +60,9 @@ public class Hud implements Disposable {
         batch.setColor(0.15f, 0.85f, 0.25f, 1f);
         batch.draw(pixel, x, y, w * frac, h);
         batch.setColor(1f, 1f, 1f, 1f);
-        font.draw(batch, "HP " + p.health + "/" + Config.MAX_HEALTH + "   x" + p.lives + "   Score " + p.score, x, y - 6 * uiScale);
+        String comboText = p.comboMultiplier > 1 ? "  x" + p.comboMultiplier + " combo!" : "";
+        font.draw(batch, "HP " + p.health + "/" + Config.MAX_HEALTH + "   Lives x" + p.lives
+            + "   Score " + p.score + comboText, x, y - 6 * uiScale);
     }
 
     public int hotbarSlotAt(float screenX, float screenYFromBottom, int sw) {

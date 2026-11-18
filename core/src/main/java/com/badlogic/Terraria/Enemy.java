@@ -263,4 +263,10 @@ public class Enemy {
             default: return "dirt";
         }
     }
+
+    public float windupFraction() {
+        if (type != BOSS || !bossCharging) return 0f;
+        float duration = bossPhase == 3 ? 1.25f : 1.8f;
+        return MathUtils.clamp(1f - bossChargeTimer / duration, 0f, 1f);
+    }
 }

@@ -1,5 +1,6 @@
 package com.badlogic.Terraria;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import java.util.ArrayList;
@@ -15,7 +16,7 @@ public class GameWorld {
     public final List<Projectile> projectiles = new ArrayList<>();
     public final Tutorial tutorial = new Tutorial();
 
-    public boolean evMine, evPlace, evCraft, evHurt, evDeath, evAttack, evKill, evCoin;
+    public boolean evMine, evPlace, evCraft, evHurt, evDeath, evAttack, evKill, evCoin, evLevelUp;
     public float shake = 0f;
     public boolean gameOver = false;
     public boolean bossDefeated = false;
@@ -24,11 +25,14 @@ public class GameWorld {
     public Enemy boss;
     public int checkpointX = -1;
     public int checkpointY = -1;
+    public boolean bossSpawned = true;
+    public float playTime = 0f;
     private float deathTimer = 0f;
     public String message = "";
     public float messageTimer = 0f;
 
-    private float timeOfDay = 0.30f;
+    public float timeOfDay = 0.30f;
+    private float autosave = Config.AUTOSAVE_INTERVAL;
     private static class Crumble { int x, y; float timer; boolean triggered, gone; float respawn; }
     private static class ArrowTrap { int x, y, dir; float timer; }
     private static class Rock { int x, y; float vy, py; boolean falling, done; }
@@ -55,6 +59,16 @@ public class GameWorld {
             world.bossY * World.TILE_SIZE,
             world.level);
         enemies.add(boss);
+        bossSpawned = true;
+    }
+
+    public boolean shouldAutosave() {
+        autosave -= Gdx.graphics.getDeltaTime();
+        if (autosave <= 0) {
+            autosave = Config.AUTOSAVE_INTERVAL;
+            return true;
+        }
+        return false;
     }
 
     private void buildTraps() {
@@ -74,6 +88,7 @@ public class GameWorld {
 
     public void update(float dt, Player.Controls controls) {
         dt = Math.min(dt, 1 / 30f);
+        playTime += dt;
         if (messageTimer > 0) messageTimer -= dt;
         if (shake > 0) shake = Math.max(0, shake - dt * 30f);
         timeOfDay = (timeOfDay + dt / Config.DAY_LENGTH) % 1f;
@@ -81,6 +96,7 @@ public class GameWorld {
 
         if (player.dead) {
             deathTimer += dt;
+            evDeath = true;
             if (deathTimer > 1.4f) {
                 deathTimer = 0f;
                 if (!player.loseLifeAndRespawn()) gameOver = true;
@@ -470,6 +486,7 @@ public class GameWorld {
         level = nextLevel;
         bossDefeated = false;
         levelComplete = false;
+        evLevelUp = true;
         checkpointX = -1;
         checkpointY = -1;
 
@@ -548,5 +565,6 @@ public class GameWorld {
         evAttack = false;
         evKill = false;
         evCoin = false;
+        evLevelUp = false;
     }
 }
