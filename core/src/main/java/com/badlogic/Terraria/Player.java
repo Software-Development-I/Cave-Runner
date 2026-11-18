@@ -30,11 +30,15 @@ public class Player {
     public boolean justLanded;
     public float lastLandSpeed;
 
-    // ---- new this module: a hardcoded tier-1 pickaxe ----
-    public int pickTier = 1;
+    // ---- Inventory-owned tool tiers ----
+    public final Inventory inventory = new Inventory();
 
     public float miningPower() {
-        return 1f + (pickTier - 1) * 0.9f;
+        return 1f + inventory.pickTier() * 0.9f;
+    }
+
+    public int attackDamage() {
+        return 5 + inventory.swordTier() * 8;
     }
 
     private boolean wasGrounded;

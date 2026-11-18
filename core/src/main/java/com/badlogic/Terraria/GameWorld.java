@@ -14,12 +14,11 @@ public class GameWorld {
 
     public boolean evMine;
     public boolean evPlace;
+    public boolean evCraft;
 
     private int mineX = -1;
     private int mineY = -1;
     private float mineProgress;
-
-    public int heldBlock = Tiles.DIRT;
 
     public GameWorld(World world, Player player) {
         this.world = world;
@@ -33,6 +32,7 @@ public class GameWorld {
             ItemDrop drop = iterator.next();
             drop.update(dt, world, player);
             if (drop.collected) {
+                player.inventory.add(drop.id, drop.amount);
                 iterator.remove();
             }
         }
@@ -42,7 +42,7 @@ public class GameWorld {
         int tile = world.get(tx, ty);
         if (!Tiles.isBreakable(tile)
             || !inReach(tx, ty)
-            || Tiles.requiredTier(tile) > player.pickTier) {
+            || Tiles.requiredTier(tile) > player.inventory.pickTier()) {
             resetMining();
             return;
         }
@@ -110,6 +110,8 @@ public class GameWorld {
     }
 
     public boolean placeTile(int tx, int ty) {
+        int id = player.inventory.selectedId();
+        if (!Inventory.isPlaceable(id)) return false;
         if (world.get(tx, ty) != Tiles.AIR || !inReach(tx, ty)) {
             return false;
         }
@@ -124,17 +126,25 @@ public class GameWorld {
             || world.isSolid(tx + 1, ty)
             || world.isSolid(tx, ty - 1)
             || world.isSolid(tx, ty + 1);
-        if (!attached) {
+        if (!attached && id != Tiles.TORCH) {
             return false;
         }
 
-        world.set(tx, ty, heldBlock);
+        world.set(tx, ty, id);
+        player.inventory.useSelected();
         evPlace = true;
         return true;
+    }
+
+    public boolean craft(Recipe recipe) {
+        boolean ok = recipe.craft(player.inventory);
+        if (ok) evCraft = true;
+        return ok;
     }
 
     public void clearEvents() {
         evMine = false;
         evPlace = false;
+        evCraft = false;
     }
 }

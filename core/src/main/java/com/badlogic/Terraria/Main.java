@@ -3,8 +3,10 @@ package com.badlogic.Terraria;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
@@ -18,6 +20,9 @@ public class Main extends ApplicationAdapter {
     private GameWorld game;
     private final Player.Controls controls = new Player.Controls();
     private final Vector3 mouse = new Vector3();
+    private BitmapFont font;
+    private OrthographicCamera uiCamera;
+    private boolean craftMenuOpen;
     private final float[] skyTmp = new float[3];
     private final int[] mineTargetTmp = new int[2];
     private boolean haveTarget;
@@ -29,6 +34,9 @@ public class Main extends ApplicationAdapter {
         batch = new SpriteBatch();
         camera = new OrthographicCamera();
         applyViewport();
+        uiCamera = new OrthographicCamera();
+        uiCamera.setToOrtho(false);
+        font = new BitmapFont();
 
         assets = new Assets();
         World world = new World(12345L, 1);
@@ -37,6 +45,7 @@ public class Main extends ApplicationAdapter {
         Player player = new Player(spawnPx, spawnPy, assets.get("player"));
         player.setSpawn(spawnPx, spawnPy);
         game = new GameWorld(world, player);
+        player.inventory.add(Tiles.WOOD, 4);
 
         camera.position.set(player.centerX(), player.centerY(), 0);
         camera.update();
@@ -45,6 +54,7 @@ public class Main extends ApplicationAdapter {
     @Override
     public void resize(int width, int height) {
         applyViewport();
+        uiCamera.setToOrtho(false, width, height);
     }
 
     private void applyViewport() {
@@ -58,11 +68,20 @@ public class Main extends ApplicationAdapter {
     @Override
     public void render() {
         float dt = Gdx.graphics.getDeltaTime();
-        buildControls();
-        game.update(dt, controls);
-        handleWorldPointer(dt);
-        handleHotbarKeys();
-        updateCamera();
+        if (Gdx.input.isKeyJustPressed(Input.Keys.TAB)
+            || Gdx.input.isKeyJustPressed(Input.Keys.C)) {
+            craftMenuOpen = !craftMenuOpen;
+        }
+
+        if (craftMenuOpen) {
+            handleCraftMenuInput();
+        } else {
+            buildControls();
+            game.update(dt, controls);
+            handleWorldPointer(dt);
+            handleHotbarKeys();
+            updateCamera();
+        }
         draw();
         game.clearEvents();
     }
@@ -83,13 +102,9 @@ public class Main extends ApplicationAdapter {
     }
 
     private void handleHotbarKeys() {
-        int[] placeable = {
-            Tiles.DIRT, Tiles.STONE, Tiles.SAND,
-            Tiles.WOOD, Tiles.PLANKS, Tiles.TORCH
-        };
-        for (int i = 0; i < placeable.length; i++) {
+        for (int i = 0; i < Inventory.HOTBAR; i++) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1 + i)) {
-                game.heldBlock = placeable[i];
+                game.player.inventory.select(i);
             }
         }
     }
@@ -184,6 +199,7 @@ public class Main extends ApplicationAdapter {
         drawDrops();
         drawPlayer();
         drawTargetHighlight();
+        drawCraftingOverlay();
     }
 
     private void drawWorld() {
@@ -293,9 +309,53 @@ public class Main extends ApplicationAdapter {
         batch.end();
     }
 
+    private void drawCraftingOverlay() {
+        batch.setProjectionMatrix(uiCamera.combined);
+        batch.begin();
+        Inventory inv = game.player.inventory;
+
+        StringBuilder hotbar = new StringBuilder();
+        for (int i = 0; i < Inventory.HOTBAR; i++) {
+            boolean selected = i == inv.selected;
+            hotbar.append(selected ? "[" : " ");
+            hotbar.append(i + 1).append(':');
+            hotbar.append(inv.ids[i] == 0 ? "-"
+                : Inventory.name(inv.ids[i]) + "x" + inv.counts[i]);
+            hotbar.append(selected ? "]" : " ").append("  ");
+        }
+
+        font.setColor(Color.WHITE);
+        font.draw(batch, hotbar.toString(), 10, 30);
+        font.draw(batch, "Pick tier: " + inv.pickTier()
+            + "  Sword tier: " + inv.swordTier()
+            + "  [TAB] crafting", 10, Gdx.graphics.getHeight() - 10);
+
+        if (craftMenuOpen) {
+            font.draw(batch, "-- CRAFTING (press number, TAB/C to close) --",
+                10, Gdx.graphics.getHeight() - 40);
+            for (int i = 0; i < Recipe.ALL.size(); i++) {
+                Recipe recipe = Recipe.ALL.get(i);
+                font.setColor(recipe.canCraft(inv) ? Color.WHITE : Color.GRAY);
+                font.draw(batch, (i + 1) + ") " + recipe.label(),
+                    10, Gdx.graphics.getHeight() - 40 - (i + 1) * 20);
+            }
+            font.setColor(Color.WHITE);
+        }
+        batch.end();
+    }
+
+    private void handleCraftMenuInput() {
+        for (int i = 0; i < Recipe.ALL.size() && i < 9; i++) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1 + i)) {
+                game.craft(Recipe.ALL.get(i));
+            }
+        }
+    }
+
     @Override
     public void dispose() {
         batch.dispose();
         assets.dispose();
+        font.dispose();
     }
 }
