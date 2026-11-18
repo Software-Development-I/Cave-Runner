@@ -21,6 +21,8 @@ public class World {
     public int spawnY;
     public int portalX = -1;
     public int portalY = -1;
+    public int bossX = -1;
+    public int bossY = -1;
 
     public final List<int[]> arrowTraps = new ArrayList<>();
     public final List<int[]> fallingRocks = new ArrayList<>();
@@ -183,6 +185,14 @@ public class World {
             int cy = surface[cx] + 1;
             tiles[cx][cy] = Tiles.FLAG;
             checkpoints.add(new int[]{cx, cy});
+        }
+
+        bossX = MathUtils.clamp(px + (px > Config.SPAWN_X ? -1 : 1) * 6,
+            6, WIDTH - 7);
+        bossY = surface[bossX] + 1;
+        for (int y = bossY; y < bossY + 3; y++) {
+            if (tiles[bossX][y] == Tiles.AIR) continue;
+            tiles[bossX][y] = Tiles.AIR;
         }
     }
 

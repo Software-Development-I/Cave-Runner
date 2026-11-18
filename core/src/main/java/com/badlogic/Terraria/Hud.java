@@ -22,9 +22,31 @@ public class Hud implements Disposable {
 
     public void render(SpriteBatch batch, GameWorld game, int sw, int sh) {
         drawHealthBar(batch, game.player, sw, sh);
+        drawLevelAndBoss(batch, game, sw, sh);
         drawHotbar(batch, game.player.inventory, sw);
         if (game.tutorial.active()) drawTutorialBanner(batch, game.tutorial, sw, sh);
         if (inventoryOpen) drawCraftMenu(batch, game.player.inventory, sw, sh);
+    }
+
+    private void drawLevelAndBoss(SpriteBatch batch, GameWorld game, int sw, int sh) {
+        TextureRegion pixel = assets.get("particle");
+        font.draw(batch, "Level " + game.level + " - " + game.world.theme.name,
+            12 * uiScale, sh - 52 * uiScale);
+        Enemy boss = game.boss;
+        if (boss == null || boss.dead) return;
+
+        float w = 300 * uiScale, h = 14 * uiScale;
+        float x = (sw - w) / 2f, y = sh - 34 * uiScale;
+        batch.setColor(0.08f, 0.08f, 0.08f, 0.9f);
+        batch.draw(pixel, x - 2, y - 2, w + 4, h + 4);
+        batch.setColor(0.55f, 0.08f, 0.18f, 1f);
+        batch.draw(pixel, x, y, w, h);
+        float frac = boss.hp / (float) boss.maxHp;
+        batch.setColor(0.85f, 0.22f, 0.12f, 1f);
+        batch.draw(pixel, x, y, w * frac, h);
+        batch.setColor(1f, 1f, 1f, 1f);
+        font.draw(batch, "BOSS - Phase " + boss.bossPhase,
+            x, y + h + 14 * uiScale);
     }
 
     private void drawHealthBar(SpriteBatch batch, Player p, int sw, int sh) {

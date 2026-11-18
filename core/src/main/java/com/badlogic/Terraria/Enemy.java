@@ -2,10 +2,12 @@ package com.badlogic.Terraria;
 
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
+import java.util.ArrayList;
+import java.util.List;
 
 /** Ordinary enemy behavior selected by type. */
 public class Enemy {
-    public static final int SLIME = 0, BAT = 1, SKELETON = 2;
+    public static final int SLIME = 0, BAT = 1, SKELETON = 2, BOSS = 3;
 
     public final int type;
     public float x, y, vx, vy, w, h;
@@ -13,13 +15,26 @@ public class Enemy {
     public boolean dead;
     public boolean facingRight = true;
     public float hurtTimer, aiTimer, phase;
+    public int bossPhase = 1;
+    public boolean bossDefeated;
     private boolean grounded;
     private final Rectangle rect = new Rectangle();
+    private int level = 1;
+    private float bossShotTimer;
+    private float bossChargeTimer;
+    private float bossJumpTimer;
+    private boolean bossCharging;
+    public final List<float[]> bossShots = new ArrayList<>();
 
     public Enemy(int type, float x, float y) {
+        this(type, x, y, 1);
+    }
+
+    public Enemy(int type, float x, float y, int level) {
         this.type = type;
         this.x = x;
         this.y = y;
+        this.level = level;
         phase = MathUtils.random(0f, 6.28f);
         switch (type) {
             case SLIME:
@@ -28,8 +43,14 @@ public class Enemy {
             case BAT:
                 w = 14; h = 9; hp = Config.BAT_HP; damage = Config.BAT_DMG;
                 break;
-            default:
+            case SKELETON:
                 w = 11; h = 27; hp = Config.SKELETON_HP; damage = Config.SKELETON_DMG;
+                break;
+            default:
+                w = 28; h = 34;
+                hp = Config.BOSS_BASE_HP + (level - 1) * 45;
+                damage = Config.BOSS_BASE_DAMAGE + (level - 1) * 5;
+                bossShotTimer = Config.BOSS_SHOT_INTERVAL;
                 break;
         }
         maxHp = hp;
@@ -45,7 +66,8 @@ public class Enemy {
         switch (type) {
             case SLIME: updateSlime(dt, world, player); break;
             case BAT: updateBat(dt, world, player); break;
-            default: updateSkeleton(dt, world, player); break;
+            case SKELETON: updateSkeleton(dt, world, player); break;
+            case BOSS: updateBoss(dt, world, player); break;
         }
     }
 
@@ -114,6 +136,63 @@ public class Enemy {
         gravityMove(dt, world);
     }
 
+    private void updateBoss(float dt, World world, Player player) {
+        float hpFraction = hp / (float) maxHp;
+        int nextPhase = hpFraction <= 1f / 3f ? 3 : hpFraction <= 2f / 3f ? 2 : 1;
+        if (nextPhase != bossPhase) {
+            bossPhase = nextPhase;
+            bossCharging = false;
+            bossJumpTimer = 0.35f;
+            bossShotTimer = 0.25f;
+        }
+
+        float dx = player.centerX() - cx();
+        if (!player.dead) facingRight = dx >= 0;
+        bossShotTimer -= dt;
+        bossJumpTimer -= dt;
+        bossChargeTimer -= dt;
+
+        if (!bossCharging && bossPhase == 1 && grounded) {
+            vx = Math.signum(dx) * 58f;
+        }
+
+        if (bossPhase >= 2 && bossJumpTimer <= 0 && grounded) {
+            vy = 210f + bossPhase * 20f;
+            vx = Math.signum(dx) * (90f + bossPhase * 15f);
+            bossJumpTimer = bossPhase == 3 ? 1.2f : 1.8f;
+            grounded = false;
+        }
+
+        if (bossPhase >= 2 && bossChargeTimer <= 0 && grounded) {
+            bossCharging = true;
+            vx = Math.signum(dx) * Config.BOSS_CHARGE_SPEED;
+            bossChargeTimer = bossPhase == 3 ? 1.25f : 1.8f;
+        }
+        if (bossCharging) {
+            vx = Math.signum(facingRight ? 1 : -1) * Config.BOSS_CHARGE_SPEED;
+            if (bossChargeTimer < (bossPhase == 3 ? 0.55f : 0.85f)) bossCharging = false;
+        }
+
+        if (bossShotTimer <= 0 && !player.dead) {
+            float direction = Math.signum(dx);
+            float px = cx() + direction * 12f;
+            float py = cy();
+            bossShots.add(new float[]{px, py, direction * Config.BOSS_PROJECTILE_SPEED,
+                (player.centerY() - py) * 0.45f, damage});
+            if (bossPhase == 3) {
+                bossShots.add(new float[]{px, py, direction * Config.BOSS_PROJECTILE_SPEED,
+                    55f, damage});
+                bossShots.add(new float[]{px, py, direction * Config.BOSS_PROJECTILE_SPEED,
+                    -55f, damage});
+            }
+            bossShotTimer = bossPhase == 3 ? Config.BOSS_SHOT_INTERVAL * 0.65f
+                : bossPhase == 2 ? Config.BOSS_SHOT_INTERVAL * 0.82f
+                : Config.BOSS_SHOT_INTERVAL;
+        }
+
+        gravityMove(dt, world);
+    }
+
     private void gravityMove(float dt, World world) {
         vy += Config.GRAVITY * dt;
         if (vy < Config.MAX_FALL) vy = Config.MAX_FALL;
@@ -163,8 +242,14 @@ public class Enemy {
         vy = knockY;
         grounded = false;
         if (hp <= 0) {
+            hp = 0;
             dead = true;
+            bossDefeated = type == BOSS;
             return true;
+        }
+        if (type == BOSS) {
+            bossPhase = hp / (float) maxHp <= 1f / 3f ? 3
+                : hp / (float) maxHp <= 2f / 3f ? 2 : 1;
         }
         return false;
     }
@@ -173,7 +258,9 @@ public class Enemy {
         switch (type) {
             case SLIME: return "slime";
             case BAT: return "bat";
-            default: return "skeleton";
+            case SKELETON: return "skeleton";
+            case BOSS: return "boss";
+            default: return "dirt";
         }
     }
 }

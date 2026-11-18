@@ -48,6 +48,13 @@ public final class Config {
     public static final int SLIME_HP = 20, SLIME_DMG = 10;
     public static final int BAT_HP = 12, BAT_DMG = 8;
     public static final int SKELETON_HP = 40, SKELETON_DMG = 15;
+    public static final int BOSS_BASE_HP = 180;
+    public static final int BOSS_BASE_DAMAGE = 20;
+    public static final int BOSS_HP = BOSS_BASE_HP;
+    public static final int BOSS_DAMAGE = BOSS_BASE_DAMAGE;
+    public static final float BOSS_CHARGE_SPEED = 220f;
+    public static final float BOSS_PROJECTILE_SPEED = 170f;
+    public static final float BOSS_SHOT_INTERVAL = 1.15f;
     public static final float ENEMY_TOUCH_KNOCK = 150f;
     public static final int ENEMY_CAP = 14;
     public static final float SPAWN_INTERVAL_DAY = 6f;

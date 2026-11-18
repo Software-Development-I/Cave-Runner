@@ -8,7 +8,7 @@ import java.util.List;
 
 /** Whole game simulation: world, player, drops, and mining without rendering or input polling. */
 public class GameWorld {
-    public final World world;
+    public World world;
     public final Player player;
     public final List<ItemDrop> drops = new ArrayList<>();
     public final List<Enemy> enemies = new ArrayList<>();
@@ -18,6 +18,12 @@ public class GameWorld {
     public boolean evMine, evPlace, evCraft, evHurt, evDeath, evAttack, evKill, evCoin;
     public float shake = 0f;
     public boolean gameOver = false;
+    public boolean bossDefeated = false;
+    public boolean levelComplete = false;
+    public int level = 1;
+    public Enemy boss;
+    public int checkpointX = -1;
+    public int checkpointY = -1;
     private float deathTimer = 0f;
     public String message = "";
     public float messageTimer = 0f;
@@ -38,10 +44,23 @@ public class GameWorld {
     public GameWorld(World world, Player player) {
         this.world = world;
         this.player = player;
+        this.level = world.level;
         buildTraps();
+        spawnBoss();
+    }
+
+    private void spawnBoss() {
+        boss = new Enemy(Enemy.BOSS,
+            world.bossX * World.TILE_SIZE,
+            world.bossY * World.TILE_SIZE,
+            world.level);
+        enemies.add(boss);
     }
 
     private void buildTraps() {
+        crumbles.clear();
+        arrowTraps.clear();
+        rocks.clear();
         for (int[] a : world.arrowTraps) {
             ArrowTrap trap = new ArrowTrap();
             trap.x = a[0]; trap.y = a[1]; trap.dir = a[2];
@@ -83,6 +102,9 @@ public class GameWorld {
         updateTraps(dt);
         updateEnemies(dt);
         updateProjectiles(dt);
+        updateBossShots();
+        updateCheckpoints();
+        updatePortal();
         updateDrops(dt);
         updateSpawning(dt);
         tutorial.update(dt, player, controls);
@@ -213,6 +235,11 @@ public class GameWorld {
 
     private void onEnemyKilled(Enemy enemy) {
         evKill = true;
+        if (enemy.type == Enemy.BOSS) {
+            bossDefeated = true;
+            boss = null;
+            toast("Boss defeated! The portal is open.");
+        }
         player.addScore(Config.SCORE_ENEMY * (enemy.type + 1));
         int coins = 1 + MathUtils.random(0, 1 + enemy.type);
         for (int i = 0; i < coins; i++) {
@@ -389,6 +416,82 @@ public class GameWorld {
 
     public boolean isNight() {
         return timeOfDay > 0.75f || timeOfDay < 0.25f;
+    }
+
+    private void updateBossShots() {
+        for (Enemy enemy : enemies) {
+            if (enemy.dead || enemy.type != Enemy.BOSS) continue;
+            for (float[] shot : enemy.bossShots) {
+                projectiles.add(new Projectile(shot[0], shot[1], shot[2], shot[3],
+                    (int) shot[4]));
+            }
+            enemy.bossShots.clear();
+        }
+    }
+
+    private void updateCheckpoints() {
+        int px = MathUtils.floor(player.centerX() / World.TILE_SIZE);
+        int py = MathUtils.floor(player.centerY() / World.TILE_SIZE);
+        for (int[] checkpoint : world.checkpoints) {
+            if (px == checkpoint[0] && Math.abs(py - checkpoint[1]) <= 1) {
+                float spawnX = (checkpoint[0] + 0.5f) * World.TILE_SIZE;
+                float spawnY = (checkpoint[1] + 1f) * World.TILE_SIZE;
+                player.setSpawn(spawnX, spawnY);
+                if (checkpointX != checkpoint[0] || checkpointY != checkpoint[1]) {
+                    checkpointX = checkpoint[0];
+                    checkpointY = checkpoint[1];
+                    toast("Checkpoint saved");
+                }
+                return;
+            }
+        }
+    }
+
+    private void updatePortal() {
+        if (!bossDefeated) return;
+        int px = MathUtils.floor(player.centerX() / World.TILE_SIZE);
+        int py = MathUtils.floor(player.centerY() / World.TILE_SIZE);
+        if (px == world.portalX && Math.abs(py - world.portalY) <= 2) {
+            if (world.level >= Config.MAX_LEVEL) {
+                levelComplete = true;
+                toast("All levels complete!");
+            } else {
+                advanceLevel();
+            }
+        }
+    }
+
+    public boolean advanceLevel() {
+        int nextLevel = Math.min(world.level + 1, Config.MAX_LEVEL);
+        if (nextLevel == world.level && world.level >= Config.MAX_LEVEL) return false;
+
+        World next = new World(world.seed, nextLevel);
+        world = next;
+        level = nextLevel;
+        bossDefeated = false;
+        levelComplete = false;
+        checkpointX = -1;
+        checkpointY = -1;
+
+        enemies.clear();
+        projectiles.clear();
+        drops.clear();
+        mineX = -1;
+        mineY = -1;
+        mineProgress = 0f;
+        spawnTimer = 3f;
+        buildTraps();
+        spawnBoss();
+
+        player.position.set((next.spawnX + 0.5f) * World.TILE_SIZE,
+            next.spawnY * World.TILE_SIZE);
+        player.setSpawn(player.position.x, player.position.y);
+        player.velocity.setZero();
+        player.health = Config.MAX_HEALTH;
+        player.dead = false;
+        player.invincible = 1.5f;
+        toast("Level " + nextLevel + ": " + next.theme.name);
+        return true;
     }
 
     private void updateSpawning(float dt) {
