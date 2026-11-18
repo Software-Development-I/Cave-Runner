@@ -1,0 +1,18 @@
+apply plugin: 'application'
+
+application {
+    mainClass = 'com.badlogic.Terraria.lwjgl3.Lwjgl3Launcher'
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaExec).configureEach {
+    workingDir = rootProject.file('assets')
+}
+
+dependencies {
+    implementation project(':core')
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
