@@ -30,6 +30,13 @@ public class Player {
     public boolean justLanded;
     public float lastLandSpeed;
 
+    // ---- new this module: a hardcoded tier-1 pickaxe ----
+    public int pickTier = 1;
+
+    public float miningPower() {
+        return 1f + (pickTier - 1) * 0.9f;
+    }
+
     private boolean wasGrounded;
     private final Rectangle bounds = new Rectangle();
     private final Vector2 spawnPoint = new Vector2();

@@ -36,6 +36,9 @@ public final class Config {
     public static final int VIEW_H_TILES = 18;
     public static final float CAMERA_SMOOTH = 0.15f;
 
+    // ---- Mining ----
+    public static final int REACH_TILES = 3;
+
     // ---- Time ----
     public static final float DAY_LENGTH = 120f;
     public static final float AUTOSAVE_INTERVAL = 60f;

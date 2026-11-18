@@ -8,16 +8,21 @@ import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector3;
 
-/** Module 4: a real, physics-driven Player replaces the camera-target dot. */
+/** Module 5: mouse-driven mining and placement. */
 public class Main extends ApplicationAdapter {
     private SpriteBatch batch;
     private OrthographicCamera camera;
     private Assets assets;
-    private World world;
-    private Player player;
+    private GameWorld game;
     private final Player.Controls controls = new Player.Controls();
+    private final Vector3 mouse = new Vector3();
     private final float[] skyTmp = new float[3];
+    private final int[] mineTargetTmp = new int[2];
+    private boolean haveTarget;
+    private int targetX;
+    private int targetY;
 
     @Override
     public void create() {
@@ -26,12 +31,12 @@ public class Main extends ApplicationAdapter {
         applyViewport();
 
         assets = new Assets();
-        world = new World(12345L, 1);
-
+        World world = new World(12345L, 1);
         float spawnPx = world.spawnX * World.TILE_SIZE;
         float spawnPy = world.spawnY * World.TILE_SIZE;
-        player = new Player(spawnPx, spawnPy, assets.get("player"));
+        Player player = new Player(spawnPx, spawnPy, assets.get("player"));
         player.setSpawn(spawnPx, spawnPy);
+        game = new GameWorld(world, player);
 
         camera.position.set(player.centerX(), player.centerY(), 0);
         camera.update();
@@ -52,17 +57,14 @@ public class Main extends ApplicationAdapter {
 
     @Override
     public void render() {
-        float delta = Gdx.graphics.getDeltaTime();
+        float dt = Gdx.graphics.getDeltaTime();
         buildControls();
-        player.update(delta, world, controls);
+        game.update(dt, controls);
+        handleWorldPointer(dt);
+        handleHotbarKeys();
         updateCamera();
         draw();
-    }
-
-    @Override
-    public void dispose() {
-        batch.dispose();
-        assets.dispose();
+        game.clearEvents();
     }
 
     private void buildControls() {
@@ -80,11 +82,88 @@ public class Main extends ApplicationAdapter {
             || Gdx.input.isKeyJustPressed(Input.Keys.UP);
     }
 
+    private void handleHotbarKeys() {
+        int[] placeable = {
+            Tiles.DIRT, Tiles.STONE, Tiles.SAND,
+            Tiles.WOOD, Tiles.PLANKS, Tiles.TORCH
+        };
+        for (int i = 0; i < placeable.length; i++) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.NUM_1 + i)) {
+                game.heldBlock = placeable[i];
+            }
+        }
+    }
+
+    private void handleWorldPointer(float dt) {
+        mouse.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+        camera.unproject(mouse);
+        int tx = MathUtils.floor(mouse.x / World.TILE_SIZE);
+        int ty = MathUtils.floor(mouse.y / World.TILE_SIZE);
+
+        int[] snapped = pickMineTarget(tx, ty);
+        haveTarget = snapped != null;
+        if (haveTarget) {
+            targetX = snapped[0];
+            targetY = snapped[1];
+        }
+
+        if (Gdx.input.isButtonPressed(Input.Buttons.LEFT) && haveTarget) {
+            game.mineTile(targetX, targetY, dt);
+        } else {
+            game.resetMining();
+        }
+
+        if (Gdx.input.isButtonJustPressed(Input.Buttons.RIGHT)) {
+            game.placeTile(tx, ty);
+        }
+    }
+
+    private int[] pickMineTarget(int cx, int cy) {
+        if (Tiles.isBreakable(game.world.get(cx, cy))
+            && game.inReach(cx, cy)) {
+            mineTargetTmp[0] = cx;
+            mineTargetTmp[1] = cy;
+            return mineTargetTmp;
+        }
+
+        int bestX = -1;
+        int bestY = -1;
+        float bestDistance = Float.MAX_VALUE;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dx == 0 && dy == 0) {
+                    continue;
+                }
+                int x = cx + dx;
+                int y = cy + dy;
+                if (!Tiles.isBreakable(game.world.get(x, y))
+                    || !game.inReach(x, y)) {
+                    continue;
+                }
+                float wx = (x + 0.5f) * World.TILE_SIZE;
+                float wy = (y + 0.5f) * World.TILE_SIZE;
+                float distance = (wx - mouse.x) * (wx - mouse.x)
+                    + (wy - mouse.y) * (wy - mouse.y);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestX = x;
+                    bestY = y;
+                }
+            }
+        }
+        if (bestX < 0) {
+            return null;
+        }
+        mineTargetTmp[0] = bestX;
+        mineTargetTmp[1] = bestY;
+        return mineTargetTmp;
+    }
+
     private void updateCamera() {
         float halfW = camera.viewportWidth / 2f;
         float halfH = camera.viewportHeight / 2f;
-        float tx = player.centerX();
-        float ty = player.centerY() + 10f;
+        float tx = game.player.centerX();
+        float ty = game.player.centerY() + 10f;
         camera.position.x += (tx - camera.position.x) * Config.CAMERA_SMOOTH;
         camera.position.y += (ty - camera.position.y) * Config.CAMERA_SMOOTH;
         camera.position.x = MathUtils.clamp(camera.position.x, halfW,
@@ -95,19 +174,22 @@ public class Main extends ApplicationAdapter {
     }
 
     private void draw() {
-        Gdx.gl.glEnable(GL20.GL_BLEND);
-        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
-        float[] sky = world.theme.sky(0f, skyTmp);
+        float[] sky = game.world.theme.sky(0f, skyTmp);
         Gdx.gl.glClearColor(sky[0], sky[1], sky[2], 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+        Gdx.gl.glEnable(GL20.GL_BLEND);
+        Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
+
         drawWorld();
+        drawDrops();
         drawPlayer();
+        drawTargetHighlight();
     }
 
-    /** Draw only the tile range visible to the camera. */
     private void drawWorld() {
         batch.setProjectionMatrix(camera.combined);
         int ts = World.TILE_SIZE;
+        World world = game.world;
         int x0 = Math.max(0, MathUtils.floor(
             (camera.position.x - camera.viewportWidth / 2f) / ts) - 1);
         int x1 = Math.min(World.WIDTH - 1, MathUtils.ceil(
@@ -116,46 +198,70 @@ public class Main extends ApplicationAdapter {
             (camera.position.y - camera.viewportHeight / 2f) / ts) - 1);
         int y1 = Math.min(World.HEIGHT - 1, MathUtils.ceil(
             (camera.position.y + camera.viewportHeight / 2f) / ts) + 1);
-        TextureRegion pixel = assets.get("particle");
 
+        TextureRegion pixel = assets.get("particle");
         batch.begin();
         for (int x = x0; x <= x1; x++) {
-            int surf = world.surfaceY(x);
+            int surface = world.surfaceY(x);
             for (int y = y0; y <= y1; y++) {
-                int type = world.get(x, y);
-
-                if (type == Tiles.AIR && y < surf - 1) {
-                    float depthFade = MathUtils.clamp((surf - 1 - y) / 4f, 0f, 1f);
+                int tile = world.get(x, y);
+                if (tile == Tiles.AIR && y < surface - 1) {
+                    float depthFade = MathUtils.clamp(
+                        (surface - 1 - y) / 4f, 0f, 1f);
                     float[] cave = world.theme.cave;
                     batch.setColor(cave[0], cave[1], cave[2], depthFade);
                     batch.draw(pixel, x * ts, y * ts, ts, ts);
                     batch.setColor(1f, 1f, 1f, 1f);
                 }
-                if (type == Tiles.AIR) {
+                if (tile == Tiles.AIR) {
                     continue;
                 }
 
-                TextureRegion region = assets.tile(type);
+                TextureRegion region = assets.tile(tile);
                 if (region == null) {
                     continue;
                 }
-
-                float[] tint = world.theme.tintFor(type);
+                float[] tint = world.theme.tintFor(tile);
                 boolean tinted = false;
-                if (type == Tiles.LAVA) {
+                if (tile == Tiles.LAVA) {
                     float flicker = 0.85f + 0.15f * MathUtils.sin(
-                        (System.nanoTime() / 1e9f) * 4f + x * 0.9f + y * 0.5f);
+                        (System.currentTimeMillis() % 100000) * 0.004f
+                            + x * 0.9f + y * 0.5f);
                     batch.setColor(1f, flicker, flicker * 0.7f, 1f);
                     tinted = true;
                 } else if (tint != null) {
                     batch.setColor(tint[0], tint[1], tint[2], 1f);
                     tinted = true;
                 }
-
                 batch.draw(region, x * ts, y * ts, ts, ts);
                 if (tinted) {
                     batch.setColor(1f, 1f, 1f, 1f);
                 }
+            }
+        }
+
+        for (int x = x0; x <= x1; x++) {
+            for (int y = y0; y <= y1; y++) {
+                float mining = world.getMining(x, y);
+                if (mining > 0.02f) {
+                    batch.setColor(0f, 0f, 0f, 0.55f * mining);
+                    batch.draw(pixel, x * ts, y * ts, ts, ts);
+                    batch.setColor(1f, 1f, 1f, 1f);
+                }
+            }
+        }
+        batch.end();
+    }
+
+    private void drawDrops() {
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        for (ItemDrop drop : game.drops) {
+            TextureRegion region = assets.tile(drop.id);
+            if (region != null) {
+                float bob = MathUtils.sin(drop.age * 6f) * 1.5f;
+                batch.draw(region, drop.x, drop.y + bob,
+                    drop.size(), drop.size());
             }
         }
         batch.end();
@@ -164,7 +270,32 @@ public class Main extends ApplicationAdapter {
     private void drawPlayer() {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        player.render(batch);
+        game.player.render(batch);
         batch.end();
+    }
+
+    private void drawTargetHighlight() {
+        if (!haveTarget) {
+            return;
+        }
+        batch.setProjectionMatrix(camera.combined);
+        int ts = World.TILE_SIZE;
+        TextureRegion pixel = assets.get("particle");
+        batch.begin();
+        batch.setColor(1f, 1f, 1f, 0.5f);
+        int px = targetX * ts;
+        int py = targetY * ts;
+        batch.draw(pixel, px, py, ts, 1);
+        batch.draw(pixel, px, py + ts - 1, ts, 1);
+        batch.draw(pixel, px, py, 1, ts);
+        batch.draw(pixel, px + ts - 1, py, 1, ts);
+        batch.setColor(1f, 1f, 1f, 1f);
+        batch.end();
+    }
+
+    @Override
+    public void dispose() {
+        batch.dispose();
+        assets.dispose();
     }
 }
