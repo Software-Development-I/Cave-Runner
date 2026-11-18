@@ -73,7 +73,9 @@ public class Main extends ApplicationAdapter {
             craftMenuOpen = !craftMenuOpen;
         }
 
-        if (craftMenuOpen) {
+        if (game.gameOver) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) create();
+        } else if (craftMenuOpen) {
             handleCraftMenuInput();
         } else {
             buildControls();
@@ -99,6 +101,8 @@ public class Main extends ApplicationAdapter {
         controls.jumpPressed = Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
             || Gdx.input.isKeyJustPressed(Input.Keys.W)
             || Gdx.input.isKeyJustPressed(Input.Keys.UP);
+        controls.attackPressed = Gdx.input.isKeyJustPressed(Input.Keys.J)
+            || Gdx.input.isKeyJustPressed(Input.Keys.X);
     }
 
     private void handleHotbarKeys() {
@@ -189,13 +193,14 @@ public class Main extends ApplicationAdapter {
     }
 
     private void draw() {
-        float[] sky = game.world.theme.sky(0f, skyTmp);
+        float[] sky = game.world.theme.sky(game.isNight() ? 1f : 0f, skyTmp);
         Gdx.gl.glClearColor(sky[0], sky[1], sky[2], 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA, GL20.GL_ONE_MINUS_SRC_ALPHA);
 
         drawWorld();
+        drawEnemiesAndProjectiles();
         drawDrops();
         drawPlayer();
         drawTargetHighlight();
@@ -269,11 +274,33 @@ public class Main extends ApplicationAdapter {
         batch.end();
     }
 
+    private void drawEnemiesAndProjectiles() {
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        for (Enemy enemy : game.enemies) {
+            TextureRegion region = assets.get(enemy.textureName());
+            if (enemy.hurtTimer > 0) batch.setColor(1f, 0.5f, 0.5f, 1f);
+            if (enemy.facingRight) batch.draw(region, enemy.x, enemy.y, enemy.w, enemy.h);
+            else batch.draw(region, enemy.x + enemy.w, enemy.y, -enemy.w, enemy.h);
+            batch.setColor(1f, 1f, 1f, 1f);
+        }
+        for (Projectile projectile : game.projectiles) {
+            TextureRegion arrow = assets.get("arrow");
+            if (projectile.vx > 0) batch.draw(arrow, projectile.x, projectile.y, projectile.w, projectile.h);
+            else batch.draw(arrow, projectile.x + projectile.w, projectile.y, -projectile.w, projectile.h);
+        }
+        batch.end();
+    }
+
     private void drawDrops() {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
         for (ItemDrop drop : game.drops) {
-            TextureRegion region = assets.tile(drop.id);
+            TextureRegion region = drop.id == ItemDrop.COIN
+                ? assets.get("coin")
+                : drop.id == ItemDrop.HEART
+                    ? assets.get("heart")
+                    : assets.tile(drop.id);
             if (region != null) {
                 float bob = MathUtils.sin(drop.age * 6f) * 1.5f;
                 batch.draw(region, drop.x, drop.y + bob,
@@ -325,10 +352,16 @@ public class Main extends ApplicationAdapter {
         }
 
         font.setColor(Color.WHITE);
+        Player player = game.player;
+        font.draw(batch, "HP: " + player.health + "/" + Config.MAX_HEALTH
+            + "  Lives: " + player.lives
+            + "  Score: " + player.score
+            + "  Coins: " + player.coins,
+            10, Gdx.graphics.getHeight() - 10);
         font.draw(batch, hotbar.toString(), 10, 30);
         font.draw(batch, "Pick tier: " + inv.pickTier()
             + "  Sword tier: " + inv.swordTier()
-            + "  [TAB] crafting", 10, Gdx.graphics.getHeight() - 10);
+            + "  [J] attack  [TAB] crafting", 10, 50);
 
         if (craftMenuOpen) {
             font.draw(batch, "-- CRAFTING (press number, TAB/C to close) --",
@@ -341,6 +374,13 @@ public class Main extends ApplicationAdapter {
             }
             font.setColor(Color.WHITE);
         }
+        if (game.gameOver) {
+            font.setColor(Color.RED);
+            font.draw(batch, "GAME OVER - press ENTER to restart",
+                Gdx.graphics.getWidth() / 2f - 140,
+                Gdx.graphics.getHeight() / 2f);
+        }
+        font.setColor(Color.WHITE);
         batch.end();
     }
 

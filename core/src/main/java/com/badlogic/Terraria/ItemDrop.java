@@ -4,6 +4,8 @@ import com.badlogic.gdx.math.MathUtils;
 
 /** A dropped block that pops out, falls, and magnetizes toward the player. */
 public class ItemDrop {
+    public static final int COIN = -1, HEART = -2;
+
     public float x, y, vx, vy;
     public final int id;
     public final int amount;
@@ -30,7 +32,7 @@ public class ItemDrop {
         float dy = player.centerY() - (y + SIZE / 2f);
         float dist = (float) Math.sqrt(dx * dx + dy * dy);
 
-        if (age > 0.35f && dist < 56f) {
+        if (!player.dead && age > 0.35f && dist < 56f) {
             float pull = 240f;
             vx = dx / Math.max(dist, 1f) * pull;
             vy = dy / Math.max(dist, 1f) * pull;
@@ -55,6 +57,9 @@ public class ItemDrop {
                 y = (ty + 1) * World.TILE_SIZE;
                 vy = 0;
                 vx *= 0.6f;
+            }
+            if (world.get(tx, MathUtils.floor((y + 2f) / World.TILE_SIZE)) == Tiles.LAVA) {
+                collected = true;
             }
         }
 
