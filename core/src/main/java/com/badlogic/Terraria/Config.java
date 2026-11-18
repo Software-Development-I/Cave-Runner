@@ -32,4 +32,9 @@ public final class Config {
 
     // ---- Levels ----
     public static final int MAX_LEVEL = 5;
+
+    // ---- Scoring ----
+    public static final int SCORE_DIRT = 1;
+    public static final int SCORE_STONE = 5;
+    public static final int SCORE_ORE = 10;
 }
