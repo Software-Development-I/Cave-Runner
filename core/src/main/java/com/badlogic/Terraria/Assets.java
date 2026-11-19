@@ -1,21 +1,18 @@
 package com.badlogic.Terraria;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Disposable;
-
 import java.util.HashMap;
 import java.util.Map;
 
 /** Loads every texture once and hands out regions by name. */
 public class Assets implements Disposable {
     private static final String[] NAMES = {
-        "dirt", "stone", "bedrock", "sand", "spikes", "lava", "crumble", "arrowtrap",
-        "coal", "iron", "gold", "wood", "leaves", "planks", "torch", "flag", "portal",
-        "coin", "heart", "arrow", "slime", "bat", "skeleton", "boss", "particle",
-        "pickaxe", "sword", "player"
+        "dirt", "stone", "bedrock", "sand", "spikes", "lava", "crumble", "arrowtrap", "coal", "iron", "gold",
+        "wood", "leaves", "planks", "torch", "flag", "portal", "coin", "heart", "arrow", "slime", "bat",
+        "skeleton", "boss", "particle", "pickaxe", "sword", "player"
     };
 
     private final AssetManager manager = new AssetManager();
@@ -23,41 +20,28 @@ public class Assets implements Disposable {
     private final TextureRegion[] tileRegions = new TextureRegion[Tiles.COUNT];
 
     public Assets() {
-        for (String name : NAMES) {
-            String path = name + ".png";
-            if (!Gdx.files.internal(path).exists()) {
-                throw new IllegalStateException("Missing required texture: " + path);
-            }
-            manager.load(path, Texture.class);
-        }
+        for (String n : NAMES) manager.load(n + ".png", Texture.class);
         manager.finishLoading();
-
-        for (String name : NAMES) {
-            Texture texture = manager.get(name + ".png", Texture.class);
-            texture.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-            regions.put(name, new TextureRegion(texture));
+        for (String n : NAMES) {
+            Texture t = manager.get(n + ".png", Texture.class);
+            t.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+            regions.put(n, new TextureRegion(t));
         }
-
         for (int i = 0; i < Tiles.COUNT; i++) {
-            String texture = Tiles.texture(i);
-            if (texture != null) {
-                tileRegions[i] = regions.get(texture);
-            }
+            String tex = Tiles.texture(i);
+            if (tex != null) tileRegions[i] = regions.get(tex);
         }
     }
 
     public TextureRegion get(String name) {
-        TextureRegion region = regions.get(name);
-        // Missing future-module art uses dirt rather than crashing this module.
-        return region != null ? region : regions.get("dirt");
+        TextureRegion r = regions.get(name);
+        if (r == null) throw new IllegalArgumentException("Missing texture: " + name);
+        return r;
     }
 
     public TextureRegion tile(int type) {
-        return type >= 0 && type < tileRegions.length ? tileRegions[type] : null;
+        return (type >= 0 && type < tileRegions.length) ? tileRegions[type] : null;
     }
 
-    @Override
-    public void dispose() {
-        manager.dispose();
-    }
+    @Override public void dispose() { manager.dispose(); }
 }

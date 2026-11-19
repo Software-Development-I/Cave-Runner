@@ -17,21 +17,30 @@ import com.badlogic.gdx.scenes.scene2d.utils.TextureRegionDrawable;
 import com.badlogic.gdx.utils.Disposable;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
-/** Scene2d on-screen movement and action controls. */
+/**
+ * On-screen controls: movement pad, JUMP / HIT / MINE / PUT buttons, PAUSE and BAG.
+ * The stage runs in "base units" (1 unit = 1 px at 720p) and the viewport scales them up with screen height,
+ * so buttons stay comfortably large on 1080p / 1440p phones. Positions come from {@link TouchLayout}.
+ * On desktop the controls are disabled (keyboard + mouse); F2 toggles them for testing.
+ */
 public class TouchHUD implements Disposable {
     public final Stage stage;
     public final Touchpad touchpad;
 
-    public boolean jumpPressed, attackPressed, inventoryToggled;
-    public boolean mineHeld, placeHeld;
+    // one-shot flags: set on touch-down, consumed by Main
+    public boolean jumpPressed, attackPressed, pauseToggled, inventoryToggled;
+    // held flags
+    public boolean mineHeld, placeHeld, jumpHeld;
 
+    /** Whether the game state wants the controls shown (playing, bag closed...). */
     public boolean visible = true;
+    /** Platform gate: false on desktop so the mouse is not covered by a virtual joystick. */
     public boolean enabled = true;
 
     private final ScreenViewport viewport;
-    private final TextButton jumpBtn, attackBtn, mineBtn, placeBtn, invBtn;
+    private final TextButton jumpBtn, attackBtn, mineBtn, placeBtn, pauseBtn, invBtn;
     private final BitmapFont font;
-    private final Texture[] textures = new Texture[8];
+    private final Texture[] textures = new Texture[12];
     private int texCount = 0;
     private float scale = 1f;
     private final Vector2 tmp = new Vector2();
@@ -63,78 +72,69 @@ public class TouchHUD implements Disposable {
         attackBtn = new TextButton("HIT", round);
         mineBtn = new TextButton("MINE", round);
         placeBtn = new TextButton("PUT", round);
+        pauseBtn = new TextButton("||", small);
         invBtn = new TextButton("BAG", small);
-        for (TextButton b : new TextButton[]{jumpBtn, attackBtn, mineBtn, placeBtn}) {
-            b.setSize(TouchLayout.BTN, TouchLayout.BTN);
-        }
+        for (TextButton b : new TextButton[]{jumpBtn, attackBtn, mineBtn, placeBtn}) b.setSize(TouchLayout.BTN, TouchLayout.BTN);
+        pauseBtn.setSize(TouchLayout.SMALL_W, TouchLayout.SMALL_H);
         invBtn.setSize(TouchLayout.SMALL_W, TouchLayout.SMALL_H);
 
-        holdListener(jumpBtn, 0);
-        holdListener(mineBtn, 1);
-        holdListener(placeBtn, 2);
+        holdListener(jumpBtn, 0); holdListener(mineBtn, 1); holdListener(placeBtn, 2);
         attackBtn.addListener(new ClickListener() {
-            @Override public boolean touchDown(InputEvent e, float x, float y, int p, int b) {
-                attackPressed = true;
-                return super.touchDown(e, x, y, p, b);
-            }
+            @Override public boolean touchDown(InputEvent e, float x, float y, int p, int b) { attackPressed = true; return super.touchDown(e, x, y, p, b); }
         });
-        invBtn.addListener(new ClickListener() {
-            @Override public void clicked(InputEvent e, float x, float y) { inventoryToggled = true; }
-        });
+        pauseBtn.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { pauseToggled = true; } });
+        invBtn.addListener(new ClickListener() { @Override public void clicked(InputEvent e, float x, float y) { inventoryToggled = true; } });
 
-        stage.addActor(jumpBtn);
-        stage.addActor(attackBtn);
-        stage.addActor(mineBtn);
-        stage.addActor(placeBtn);
-        stage.addActor(invBtn);
+        stage.addActor(jumpBtn); stage.addActor(attackBtn); stage.addActor(mineBtn);
+        stage.addActor(placeBtn); stage.addActor(pauseBtn); stage.addActor(invBtn);
         resize(Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
     }
 
-    private void holdListener(TextButton b, int which) {
+    private void holdListener(TextButton b, final int which) {
         b.addListener(new ClickListener() {
             @Override public boolean touchDown(InputEvent e, float x, float y, int p, int btn) {
-                if (which == 0) jumpPressed = true;
-                else if (which == 1) mineHeld = true;
-                else placeHeld = true;
+                if (which == 0) { jumpPressed = true; jumpHeld = true; }
+                else if (which == 1) mineHeld = true; else placeHeld = true;
                 return super.touchDown(e, x, y, p, btn);
             }
             @Override public void touchUp(InputEvent e, float x, float y, int p, int btn) {
-                if (which == 1) mineHeld = false;
-                else if (which == 2) placeHeld = false;
+                if (which == 0) jumpHeld = false; else if (which == 1) mineHeld = false; else placeHeld = false;
                 super.touchUp(e, x, y, p, btn);
             }
         });
     }
 
+    /** Places every actor from the pure {@link TouchLayout} rects (screen px) converted to stage units. */
     private void layout(int w, int h) {
         float[][] r = TouchLayout.compute(w, h);
-        Actor[] actors = {touchpad, jumpBtn, attackBtn, mineBtn, placeBtn, invBtn};
-        for (int i = 0; i < actors.length; i++) {
-            actors[i].setPosition(r[i][0] / scale, r[i][1] / scale);
-        }
+        Actor[] actors = {touchpad, jumpBtn, attackBtn, mineBtn, placeBtn, pauseBtn, invBtn};
+        for (int i = 0; i < actors.length; i++) actors[i].setPosition(r[i][0] / scale, r[i][1] / scale);
     }
 
     public float axisX() { return touchpad.getKnobPercentX(); }
+    public float axisY() { return touchpad.getKnobPercentY(); }
 
+    /** True if a screen-space point (origin top-left) lies over any visible HUD control. */
     public boolean hitsHud(float screenX, float screenY) {
         if (!visible || !enabled) return false;
         stage.screenToStageCoordinates(tmp.set(screenX, screenY));
         return stage.hit(tmp.x, tmp.y, true) != null;
     }
 
-    public void consumeFlags() { jumpPressed = attackPressed = inventoryToggled = false; }
+    public void consumeFlags() { jumpPressed = attackPressed = pauseToggled = inventoryToggled = false; }
 
     public void setVisible(boolean v) {
         visible = v;
         boolean show = v && enabled;
         for (Actor a : stage.getActors()) a.setVisible(show);
-        if (!show) mineHeld = placeHeld = false;
+        if (!show) { mineHeld = placeHeld = jumpHeld = false; }
     }
 
+    /** While the bag is open only the BAG button stays, so the player can close it again on a phone. */
     public void showOnlyBag() {
         visible = true;
         for (Actor a : stage.getActors()) a.setVisible(enabled && a == invBtn);
-        mineHeld = placeHeld = false;
+        mineHeld = placeHeld = jumpHeld = false;
     }
 
     public void act(float dt) { stage.act(dt); }
@@ -149,15 +149,13 @@ public class TouchHUD implements Disposable {
 
     private Drawable circle(int size, Color c) {
         Pixmap pm = new Pixmap(size, size, Pixmap.Format.RGBA8888);
-        pm.setColor(c);
-        pm.fillCircle(size / 2, size / 2, size / 2 - 1);
+        pm.setColor(c); pm.fillCircle(size / 2, size / 2, size / 2 - 1);
         return drawable(pm);
     }
 
     private Drawable square(int w, int h, Color c) {
         Pixmap pm = new Pixmap(w, h, Pixmap.Format.RGBA8888);
-        pm.setColor(c);
-        pm.fill();
+        pm.setColor(c); pm.fill();
         return drawable(pm);
     }
 
@@ -169,10 +167,7 @@ public class TouchHUD implements Disposable {
     }
 
     @Override public void dispose() {
-        stage.dispose();
-        font.dispose();
-        for (int i = 0; i < texCount; i++) {
-            if (textures[i] != null) textures[i].dispose();
-        }
+        stage.dispose(); font.dispose();
+        for (int i = 0; i < texCount; i++) if (textures[i] != null) textures[i].dispose();
     }
 }

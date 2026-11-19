@@ -1,25 +1,32 @@
 package com.badlogic.Terraria;
 
 import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.audio.AudioDevice;
 import com.badlogic.gdx.audio.Sound;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Disposable;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Random;
 
+/**
+ * Procedurally generated sound effects and looping music, so the game ships with NO audio files.
+ * Each effect is synthesised to a 16-bit mono WAV, written to the local cache, then loaded as a Sound.
+ * If audio is unavailable (headless, missing device) every method silently does nothing.
+ */
 public class Sfx implements Disposable {
     public static final int RATE = 22050;
 
-    private Sound jump, mine, place, hurt, coin, death, attack, kill, levelUp, craft, music;
+    private Sound jump, mine, place, hurt, coin, death, attack, kill, levelUp, craft, click;
+    private Sound music;
     private long musicId = -1;
     public boolean sfxOn = true, musicOn = true;
     private boolean ready;
 
     public Sfx() {
         try {
-            sfxOn = SaveData.sfxOn();
-            musicOn = SaveData.musicOn();
+            sfxOn = SaveData.sfxOn(); musicOn = SaveData.musicOn();
             jump = make("jump", tone(0.14f, 320f, 640f, 0.35f, 0));
             mine = make("mine", noiseHit(0.09f, 0.35f));
             place = make("place", tone(0.08f, 180f, 120f, 0.4f, 1));
@@ -30,6 +37,7 @@ public class Sfx implements Disposable {
             kill = make("kill", tone(0.2f, 500f, 900f, 0.4f, 1));
             levelUp = make("levelup", arpeggio());
             craft = make("craft", chirp(0.18f, 500f, 750f));
+            click = make("click", tone(0.04f, 700f, 600f, 0.3f, 1));
             music = make("music", musicLoop());
             ready = true;
             applyMusic();
@@ -44,9 +52,7 @@ public class Sfx implements Disposable {
         return Gdx.audio.newSound(fh);
     }
 
-    private void play(Sound s, float vol) {
-        if (ready && sfxOn && s != null) s.play(vol);
-    }
+    private void play(Sound s, float vol) { if (ready && sfxOn && s != null) s.play(vol); }
 
     public void jump() { play(jump, 0.5f); }
     public void mine() { play(mine, 0.5f); }
@@ -58,37 +64,32 @@ public class Sfx implements Disposable {
     public void kill() { play(kill, 0.7f); }
     public void levelUp() { play(levelUp, 0.8f); }
     public void craft() { play(craft, 0.7f); }
+    public void click() { play(click, 0.5f); }
 
-    public void setSfx(boolean on) {
-        sfxOn = on;
-        SaveData.setSfx(on);
-    }
-
-    public void setMusic(boolean on) {
-        musicOn = on;
-        SaveData.setMusic(on);
-        applyMusic();
-    }
+    public void setSfx(boolean on) { sfxOn = on; SaveData.setSfx(on); }
+    public void setMusic(boolean on) { musicOn = on; SaveData.setMusic(on); applyMusic(); }
 
     private void applyMusic() {
         if (!ready || music == null) return;
-        if (musicOn) {
-            if (musicId == -1) musicId = music.loop(0.25f);
-        } else if (musicId != -1) {
-            music.stop(musicId);
-            musicId = -1;
-        }
+        if (musicOn) { if (musicId == -1) musicId = music.loop(0.25f); }
+        else if (musicId != -1) { music.stop(musicId); musicId = -1; }
     }
+
+    public void pauseMusic() { if (ready && musicId != -1) music.pause(musicId); }
+    public void resumeMusic() { if (ready && musicOn && musicId != -1) music.resume(musicId); }
+
+    // ------------------------------------------------------------------ synthesis
 
     private static float wave(int kind, double phase) {
         double p = phase - Math.floor(phase);
         switch (kind) {
-            case 1: return p < 0.5 ? 1f : -1f;
-            case 2: return (float) (2 * p - 1);
-            default: return (float) Math.sin(phase * 2 * Math.PI);
+            case 1: return (float) (p < 0.5 ? 1 : -1);               // square
+            case 2: return (float) (2 * p - 1);                      // saw
+            default: return (float) Math.sin(phase * 2 * Math.PI);   // sine
         }
     }
 
+    /** A pitch sweep from f0 to f1 with a fast decay envelope. */
     static short[] tone(float dur, float f0, float f1, float vol, int kind) {
         int n = (int) (dur * RATE);
         short[] out = new short[n];
@@ -109,7 +110,7 @@ public class Sfx implements Disposable {
         double phase = 0;
         for (int i = 0; i < n; i++) {
             float t = i / (float) n;
-            double f = i < n / 2 ? f0 : f1;
+            double f = i < n / 2 ? f0 : f1;   // two-note "ding"
             phase += f / RATE;
             float env = (float) Math.pow(1 - t, 1.3) * Math.min(1f, i / 60f);
             out[i] = (short) (wave(1, phase) * env * 0.3f * 32000);
@@ -124,7 +125,7 @@ public class Sfx implements Disposable {
         float lp = 0;
         for (int i = 0; i < n; i++) {
             float t = i / (float) n;
-            lp += (r.nextFloat() * 2 - 1 - lp) * 0.35f;
+            lp += (r.nextFloat() * 2 - 1 - lp) * 0.35f;   // low-pass noise
             out[i] = (short) (lp * (float) Math.pow(1 - t, 2.2) * vol * 32000);
         }
         return out;
@@ -137,7 +138,7 @@ public class Sfx implements Disposable {
         float lp = 0;
         for (int i = 0; i < n; i++) {
             float t = i / (float) n;
-            float k = 0.1f + 0.6f * t;
+            float k = 0.1f + 0.6f * t;                     // filter opens over time: a "swish"
             lp += (r.nextFloat() * 2 - 1 - lp) * k;
             out[i] = (short) (lp * (float) Math.sin(Math.PI * t) * vol * 32000);
         }
@@ -160,13 +161,12 @@ public class Sfx implements Disposable {
         return out;
     }
 
+    /** A gentle 8-bar minor-key loop: bass + arpeggio, deliberately quiet. */
     static short[] musicLoop() {
         float beat = 0.30f;
         float[] bass = {110f, 110f, 87.31f, 98f, 110f, 110f, 82.41f, 98f};
-        float[][] chord = {{220, 261.63f, 329.63f}, {220, 261.63f, 329.63f},
-            {174.61f, 220, 261.63f}, {196, 246.94f, 293.66f},
-            {220, 261.63f, 329.63f}, {220, 261.63f, 329.63f},
-            {164.81f, 207.65f, 246.94f}, {196, 246.94f, 293.66f}};
+        float[][] chord = {{220, 261.63f, 329.63f}, {220, 261.63f, 329.63f}, {174.61f, 220, 261.63f}, {196, 246.94f, 293.66f},
+            {220, 261.63f, 329.63f}, {220, 261.63f, 329.63f}, {164.81f, 207.65f, 246.94f}, {196, 246.94f, 293.66f}};
         int per = (int) (beat * 4 * RATE);
         short[] out = new short[per * bass.length];
         for (int bar = 0; bar < bass.length; bar++) {
@@ -176,56 +176,36 @@ public class Sfx implements Disposable {
                 bp += bass[bar] / RATE;
                 float benv = (float) Math.pow(1 - (i % (per / 2)) / (float) (per / 2), 1.5);
                 float v = wave(0, bp) * benv * 0.30f;
-                int step = (int) (t * 8) % 3;
+                int step = (int) (t * 8) % 3;             // arpeggiate the chord tones
                 double ap = (bar * per + i) * (double) chord[bar][step] / RATE;
                 float aenv = (float) Math.pow(1 - ((i * 8) % per) / (float) per, 1.2);
                 v += wave(0, ap) * aenv * 0.10f;
                 out[bar * per + i] = (short) (v * 32000 * 0.7f);
             }
         }
+        // short fade at both ends so the loop point does not click
         int fade = RATE / 50;
-        for (int i = 0; i < fade; i++) {
-            float f = i / (float) fade;
-            out[i] = (short) (out[i] * f);
-            int j = out.length - 1 - i;
-            out[j] = (short) (out[j] * f);
-        }
+        for (int i = 0; i < fade; i++) { float f = i / (float) fade; out[i] = (short) (out[i] * f); int j = out.length - 1 - i; out[j] = (short) (out[j] * f); }
         return out;
     }
 
+    /** Wraps 16-bit mono PCM in a canonical 44-byte-header WAV file. */
     static byte[] wav(short[] pcm) throws IOException {
         int dataLen = pcm.length * 2;
         ByteArrayOutputStream b = new ByteArrayOutputStream(44 + dataLen);
-        b.write(new byte[]{'R','I','F','F'});
-        le32(b, 36 + dataLen);
-        b.write(new byte[]{'W','A','V','E','f','m','t',' '});
-        le32(b, 16);
-        le16(b, 1);
-        le16(b, 1);
-        le32(b, RATE);
-        le32(b, RATE * 2);
-        le16(b, 2);
-        le16(b, 16);
-        b.write(new byte[]{'d','a','t','a'});
-        le32(b, dataLen);
+        b.write(new byte[]{'R', 'I', 'F', 'F'}); le32(b, 36 + dataLen);
+        b.write(new byte[]{'W', 'A', 'V', 'E', 'f', 'm', 't', ' '}); le32(b, 16);
+        le16(b, 1); le16(b, 1); le32(b, RATE); le32(b, RATE * 2); le16(b, 2); le16(b, 16);
+        b.write(new byte[]{'d', 'a', 't', 'a'}); le32(b, dataLen);
         for (short s : pcm) le16(b, s);
         return b.toByteArray();
     }
+    private static void le16(ByteArrayOutputStream b, int v) { b.write(v & 0xFF); b.write((v >> 8) & 0xFF); }
+    private static void le32(ByteArrayOutputStream b, int v) { le16(b, v & 0xFFFF); le16(b, (v >>> 16) & 0xFFFF); }
 
-    private static void le16(ByteArrayOutputStream b, int v) {
-        b.write(v & 0xff);
-        b.write((v >> 8) & 0xff);
-    }
-
-    private static void le32(ByteArrayOutputStream b, int v) {
-        le16(b, v & 0xffff);
-        le16(b, (v >>> 16) & 0xffff);
-    }
-
-    @Override
-    public void dispose() {
+    @Override public void dispose() {
         if (!ready) return;
-        Sound[] all = {jump, mine, place, hurt, coin, death, attack, kill, levelUp, craft, music};
+        Sound[] all = {jump, mine, place, hurt, coin, death, attack, kill, levelUp, craft, click, music};
         for (Sound s : all) if (s != null) s.dispose();
     }
 }

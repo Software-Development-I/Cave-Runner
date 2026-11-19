@@ -3,30 +3,24 @@ package com.badlogic.Terraria;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Data-driven crafting recipes. */
+/** Data-driven crafting recipes: adding one is a single line in {@link #ALL}. */
 public class Recipe {
     public final int resultId, resultCount;
     public final int[] ingredientIds, ingredientCounts;
 
     private Recipe(int resultId, int resultCount, int[] ids, int[] counts) {
-        this.resultId = resultId;
-        this.resultCount = resultCount;
-        this.ingredientIds = ids;
-        this.ingredientCounts = counts;
+        this.resultId = resultId; this.resultCount = resultCount;
+        this.ingredientIds = ids; this.ingredientCounts = counts;
     }
 
     private static Recipe r(int res, int n, int... pairs) {
         int k = pairs.length / 2;
-        int[] ids = new int[k], counts = new int[k];
-        for (int i = 0; i < k; i++) {
-            ids[i] = pairs[2 * i];
-            counts[i] = pairs[2 * i + 1];
-        }
-        return new Recipe(res, n, ids, counts);
+        int[] ids = new int[k], cs = new int[k];
+        for (int i = 0; i < k; i++) { ids[i] = pairs[2 * i]; cs[i] = pairs[2 * i + 1]; }
+        return new Recipe(res, n, ids, cs);
     }
 
     public static final List<Recipe> ALL = new ArrayList<>();
-
     static {
         ALL.add(r(Tiles.PLANKS, 4, Tiles.WOOD, 1));
         ALL.add(r(Tiles.TORCH, 4, Tiles.COAL, 1, Tiles.WOOD, 1));
@@ -39,24 +33,19 @@ public class Recipe {
     }
 
     public boolean canCraft(Inventory inv) {
+        // Tools are one-of-a-kind: don't craft a duplicate
         if (Inventory.isTool(resultId) && inv.count(resultId) > 0) return false;
-        for (int i = 0; i < ingredientIds.length; i++) {
-            if (!inv.has(ingredientIds[i], ingredientCounts[i])) return false;
-        }
+        for (int i = 0; i < ingredientIds.length; i++) if (!inv.has(ingredientIds[i], ingredientCounts[i])) return false;
         return true;
     }
 
     public boolean craft(Inventory inv) {
         if (!canCraft(inv)) return false;
-        for (int i = 0; i < ingredientIds.length; i++) {
-            inv.remove(ingredientIds[i], ingredientCounts[i]);
-        }
+        for (int i = 0; i < ingredientIds.length; i++) inv.remove(ingredientIds[i], ingredientCounts[i]);
         int left = inv.add(resultId, resultCount);
-        if (left > 0) {
+        if (left > 0) { // inventory full: refund and fail
             inv.remove(resultId, resultCount - left);
-            for (int i = 0; i < ingredientIds.length; i++) {
-                inv.add(ingredientIds[i], ingredientCounts[i]);
-            }
+            for (int i = 0; i < ingredientIds.length; i++) inv.add(ingredientIds[i], ingredientCounts[i]);
             return false;
         }
         return true;
